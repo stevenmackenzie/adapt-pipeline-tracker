@@ -185,6 +185,36 @@
   var STAGES = ['Lead','Qualify','Discover','Solution / POC','Proposal','Negotiate','Closed Won','Closed Lost'];
   var ACT_TYPES = ['Correspondence','Document','Presentation','Discussion','PoE Evidence'];
   var ECIF_STATUSES = ['Not applicable','Not started','Qualifying','Nominated','Approved','In delivery','PoE submitted','Paid & converted'];
+  var OWNER_OPTIONS = ['Diliara','Steven','Adil','Jitse'];
+  var SECTOR_OPTIONS = ['Oil and gas','Healthcare','Other'];
+
+  function buildOwnerOptionsHtml(current){
+    var opts = '<option value="">— Unassigned —</option>';
+    var matched = false;
+    OWNER_OPTIONS.forEach(function(o){
+      var sel = (o === current) ? ' selected' : '';
+      if(o === current) matched = true;
+      opts += '<option value="' + o + '"' + sel + '>' + o + '</option>';
+    });
+    if(current && !matched){
+      opts += '<option value="' + escapeHtml(current) + '" selected>' + escapeHtml(current) + ' (existing)</option>';
+    }
+    return opts;
+  }
+
+  function buildSectorOptionsHtml(current){
+    var opts = '';
+    var matched = false;
+    SECTOR_OPTIONS.forEach(function(o){
+      var sel = (o === current) ? ' selected' : '';
+      if(o === current) matched = true;
+      opts += '<option value="' + o + '"' + sel + '>' + o + '</option>';
+    });
+    if(current && !matched){
+      opts += '<option value="' + escapeHtml(current) + '" selected>' + escapeHtml(current) + ' (existing)</option>';
+    }
+    return opts;
+  }
   var accounts = [];
   var activeId = null;
 
@@ -474,10 +504,10 @@
         '<div class="at-field"><label>Stage</label><select id="af-stage">' + STAGES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('') + '</select></div>' +
       '</div>' +
       '<div class="at-row2">' +
-        '<div class="at-field"><label>Owner</label><input id="af-owner" type="text" placeholder="Account executive" /></div>' +
+        '<div class="at-field"><label>Owner</label><select id="af-owner">' + buildOwnerOptionsHtml('') + '</select></div>' +
         '<div class="at-field"><label>Microsoft co-sell</label><select id="af-cosell"><option value="no">Not registered</option><option value="yes">Registered</option></select></div>' +
       '</div>' +
-      '<div class="at-field"><label>Sector</label><input id="af-sector" type="text" placeholder="e.g. Government, Energy" /></div>' +
+      '<div class="at-field"><label>Sector</label><select id="af-sector">' + buildSectorOptionsHtml('') + '</select></div>' +
       '<div class="at-field"><label>ECIF status</label><select id="af-ecif">' + ECIF_STATUSES.map(function(s){return '<option value="'+s+'"'+(s==='Not applicable'?' selected':'')+'>'+s+'</option>';}).join('') + '</select></div>' +
       '<div class="at-field"><label>Next step</label><input id="af-nextstep" type="text" placeholder="e.g. Schedule discovery call" /></div>' +
       '<div class="at-field"><label>Next step date</label><input id="af-nextdate" type="date" /></div>' +
@@ -632,10 +662,10 @@
         '<div class="at-field"><label>Stage</label><select id="dd-stage">' + STAGES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('') + '</select></div>' +
       '</div>' +
       '<div class="at-row2">' +
-        '<div class="at-field"><label>Owner</label><input id="dd-owner" type="text" /></div>' +
+        '<div class="at-field"><label>Owner</label><select id="dd-owner">' + buildOwnerOptionsHtml(a.owner || '') + '</select></div>' +
         '<div class="at-field"><label>Microsoft co-sell</label><select id="dd-cosell"><option value="no">Not registered</option><option value="yes">Registered</option></select></div>' +
       '</div>' +
-      '<div class="at-field"><label>Sector</label><input id="dd-sector" type="text" /></div>' +
+      '<div class="at-field"><label>Sector</label><select id="dd-sector">' + buildSectorOptionsHtml(a.sector || '') + '</select></div>' +
       '<div class="at-field"><label>Next step</label><input id="dd-nextstep" type="text" /></div>' +
       '<div class="at-field"><label>Next step date</label><input id="dd-nextdate" type="date" /></div>' +
       '<div class="at-section-label">ECIF funding status</div>' +
@@ -656,9 +686,7 @@
 
     document.getElementById('dd-tier').value = a.tier;
     document.getElementById('dd-stage').value = a.stage;
-    document.getElementById('dd-owner').value = a.owner || '';
     document.getElementById('dd-cosell').value = a.msCosell ? 'yes' : 'no';
-    document.getElementById('dd-sector').value = a.sector || '';
     document.getElementById('dd-nextstep').value = a.nextStep || '';
     document.getElementById('dd-nextdate').value = a.nextStepDate || '';
     document.getElementById('dd-ecif-status').value = a.ecifStatus || 'Not applicable';
