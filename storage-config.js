@@ -48,9 +48,13 @@ const LocalBackend = {
 // SharePoint backend — reads/writes the "ADAPT Tracker Data" list via Graph.
 // ---------------------------------------------------------------------------
 let msalInstance = null;
+let msalInitPromise = null;
 let cachedAccount = null;
 
 function getMsal() {
+  if (typeof msal === 'undefined') {
+    throw new Error('The MSAL sign-in library did not load. Check that msal-browser.min.js is present alongside index.html in the repo.');
+  }
   if (!msalInstance) {
     msalInstance = new msal.PublicClientApplication({
       auth: {
@@ -62,12 +66,19 @@ function getMsal() {
         cacheLocation: 'localStorage' // survives page refreshes, so people aren't asked to sign in every time
       }
     });
+    msalInitPromise = msalInstance.initialize();
   }
   return msalInstance;
 }
 
-async function getGraphToken() {
+async function ensureMsalReady() {
   const app = getMsal();
+  if (msalInitPromise) await msalInitPromise;
+  return app;
+}
+
+async function getGraphToken() {
+  const app = await ensureMsalReady();
   const request = { scopes: ['Sites.ReadWrite.All'] };
 
   if (!cachedAccount) {
