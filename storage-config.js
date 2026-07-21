@@ -112,9 +112,14 @@ function listItemsPath() {
 }
 
 async function findItemByKey(key) {
-  const data = await graphFetch(listItemsPath() + "?expand=fields&$filter=fields/Key eq '" + key + "'");
-  if (data && data.value && data.value.length > 0) return data.value[0];
-  return null;
+  // Deliberately not using $filter=fields/Key eq '...' here — Graph's support for
+  // filtering SharePoint list items by a custom column is unreliable unless that
+  // column is indexed, and often fails silently. This list only ever holds a
+  // handful of rows, so fetching everything and filtering client-side is simpler
+  // and far more reliable.
+  const data = await graphFetch(listItemsPath() + '?expand=fields');
+  if (!data || !data.value) return null;
+  return data.value.find((item) => item.fields && item.fields.Key === key) || null;
 }
 
 const SharePointBackend = {
@@ -161,21 +166,35 @@ const SharePointBackend = {
 
 window.storage = STORAGE_MODE === 'sharepoint' ? SharePointBackend : LocalBackend;
 
-// Status banner
+// Status banner — this now runs a real test call rather than just checking
+// which mode is configured, so a broken connection shows up loudly instead
+// of silently pretending to work.
 window.addEventListener('DOMContentLoaded', function () {
   var el = document.getElementById('storage-mode-banner');
   if (!el) return;
+
   if (STORAGE_MODE === 'local') {
     el.innerHTML =
       '⚠️ Running on local browser storage — what you see here is only saved on this device, not shared with your team yet. ' +
       'See <code>SETUP-GRAPH.md</code> in this repo to connect a shared SharePoint list.';
     el.style.display = 'block';
-  } else {
-    el.innerHTML =
-      '🔗 Connected to shared SharePoint storage — changes here are visible to everyone on the team with access to this site.';
-    el.style.display = 'block';
-    el.style.background = '#E3F2E5';
-    el.style.color = '#1B5E20';
-    el.style.borderColor = '#A5D6A7';
+    return;
   }
+
+  el.innerHTML = '⏳ Checking connection to SharePoint...';
+  el.style.display = 'block';
+
+  graphFetch(listItemsPath() + '?$top=1')
+    .then(function () {
+      el.innerHTML = '🔗 Connected to shared SharePoint storage — changes here are visible to everyone on the team with access to this site.';
+      el.style.background = '#E3F2E5';
+      el.style.color = '#1B5E20';
+      el.style.borderColor = '#A5D6A7';
+    })
+    .catch(function (err) {
+      el.innerHTML = '❌ Could not connect to SharePoint — data is NOT being saved anywhere right now. Error: ' + err.message;
+      el.style.background = '#FDECEA';
+      el.style.color = '#B71C1C';
+      el.style.borderColor = '#F5C6C3';
+    });
 });
