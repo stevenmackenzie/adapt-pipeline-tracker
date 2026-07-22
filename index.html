@@ -62,11 +62,17 @@
 }
 .at-card {
   background: #fff; border: 1px solid #D0C4E0; border-radius: 8px; padding: 10px 10px 8px;
-  margin-bottom: 8px; cursor: pointer; transition: box-shadow .15s;
+  margin-bottom: 8px; cursor: pointer; transition: box-shadow .15s; position: relative;
 }
 .at-card:hover { box-shadow: 0 2px 8px rgba(107,63,160,0.18); }
-.at-card .nm { font-size: 13px; font-weight: bold; color: #1A237E; margin-bottom: 3px; }
+.at-card .nm { font-size: 13px; font-weight: bold; color: #1A237E; margin-bottom: 3px; padding-right: 16px; }
 .at-card .meta { font-size: 11px; color: #777; margin-bottom: 6px; }
+.at-rag-dot {
+  position: absolute; top: 10px; right: 10px; width: 9px; height: 9px; border-radius: 50%;
+}
+.at-rag-dot.green { background: #2E9E5B; }
+.at-rag-dot.amber { background: #E0A422; }
+.at-rag-dot.red { background: #C0392B; }
 .at-tier { display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; }
 .at-tier1 { background: #6B3FA0; color: #fff; }
 .at-tier2 { background: #D0C4E0; color: #3C3489; }
@@ -133,6 +139,16 @@
 .at-actions-header h3 { margin: 0; color: #fff; font-size: 14px; }
 .at-actions-header .counts { font-size: 11px; color: #DCD3EE; }
 .at-actions-header .toggle { color: #fff; font-size: 12px; }
+.at-review-btn {
+  background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold; cursor: pointer;
+}
+.at-review-btn:hover { background: rgba(255,255,255,0.22); }
+.at-completed-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 4px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+.at-completed-row:last-child { border-bottom: none; }
+.at-completed-row .cdate { font-weight: bold; color: #2E9E5B; min-width: 78px; flex-shrink: 0; }
+.at-completed-row .ccompany { font-weight: bold; color: #1A237E; min-width: 130px; flex-shrink: 0; }
+.at-completed-row .cdesc { flex: 1; color: #444; }
 .at-actions-body { max-height: 280px; overflow-y: auto; }
 .at-action-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid #f0f0f0; font-size: 12px; cursor: pointer; }
 .at-action-row:hover { background: #FAF8FC; }
@@ -176,11 +192,17 @@
   <span id="at-sharepoint-display"></span>
 </div>
 
+<div id="at-load-error-banner" style="display:none; margin:0 20px 12px; background:#FDECEA; border:1px solid #C0392B; border-radius:8px; padding:10px 14px; font-size:12px; color:#7A2418;">
+  ⚠️ Couldn't load the shared account data from SharePoint just now (this can happen with an expired sign-in or a network hiccup). To protect the existing data, nothing has been changed or saved.
+  <button id="at-load-retry" style="margin-left:8px; background:#C0392B; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:bold; cursor:pointer;">Retry</button>
+</div>
+
 <div class="at-actions-panel" id="at-actions-panel">
   <div class="at-actions-header" id="at-actions-toggle">
     <h3>📋 Action Tracker</h3>
     <div style="display:flex; align-items:center; gap:10px;">
       <span class="counts" id="at-actions-counts"></span>
+      <button class="at-review-btn" id="at-review-completed">Review completed (7d)</button>
       <span class="toggle" id="at-actions-toggle-icon">▾</span>
     </div>
   </div>
@@ -219,6 +241,12 @@
     <option value="Paid & converted">Paid & converted</option>
   </select>
   <input type="text" id="at-filter-search" placeholder="Search account or owner" />
+  <select id="at-filter-rag">
+    <option value="">All (R/A/G)</option>
+    <option value="green">Green &mdash; updated within 7 days</option>
+    <option value="amber">Amber &mdash; 8&ndash;30 days</option>
+    <option value="red">Red &mdash; overdue or 30+ days</option>
+  </select>
 </div>
 
 <div class="at-board" id="at-board"></div>
@@ -391,6 +419,294 @@
     { name: 'VGE-Venture Gulf Engineering', tier: 3, sector: 'Engineering Service Provider (Supplier)', stage: 'Discover', nextStep: 'Place immediate outreach call within 5 business days', note: 'Sourced from ADAPT Sales Funnel Tracker (14 July 2026) as a top-priority supplier. Contact: Ravish Han, Deputy Manager - Business Support @ +974 4460 2244.', clusterNote: '' },
   ];
 
+  var FULL_IMPORT_SEED = [
+    { name: 'Emkan for Engineering and Contracting Services', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Place immediate outreach call within 5 business days', contact: '', title: '', email: '' },
+    { name: 'Baker Hughes', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Qualify', nextStep: 'Place immediate outreach call within 5 business days', contact: 'Taya Alfred', title: 'MD Northern Gulf', email: 'taya.alfred@bakerhughes.com' },
+    { name: 'Halliburton', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Discover', nextStep: 'Place immediate outreach call within 5 business days', contact: 'Moosa Albalushi', title: 'Government Relations Manager', email: 'moosa.albalushi@halliburton.com' },
+    { name: 'QATALUM', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Francesco Sutcliffe', title: 'Manager Planning & Reliability  Operations', email: 'francesco.sutcliffe@qatalum.com' },
+    { name: 'SLB', classification: 'Buyer', sector: 'Engineering Service Provider', tier: 3, stage: 'Solution / POC', nextStep: 'Place immediate outreach call within 5 business days', contact: 'Haider Douch', title: 'Qatar Supply Chain Manager', email: '' },
+    { name: 'Technip FMC', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Prepare and deliver executive platform demonstration', contact: 'Stewart Robertson', title: 'Country Manager Qatar', email: 'stewart.robertson@technipfmc.com' },
+    { name: 'ARABCAL ICON TECHNICAL SOLUTION WLL', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'United Equipment Group (UEG)', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'United Equipment group UEG', title: 'Secretary /assistant of MD', email: 'mdsecretary@ueg.qa' },
+    { name: 'Altrad (Cape East)', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Samir Chopra', title: 'CEO - Altrad Services Middle East', email: 'samir.chopra@capeplc.net' },
+    { name: 'Ashghal', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Mohammed bin Abdulaziz Al-meer', title: 'President', email: 'mohammed.almeer@ashghal.gov.qa' },
+    { name: 'CA Engineering LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Cegelec Qatar w.l.l.', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Darwish Petroleum and Industrial Services (Buchen)', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Raul Sampaio', title: 'Managing Director', email: 'raul.sampaio@xervon-me.com' },
+    { name: 'Descon (POC)', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Prepare and deliver executive platform demonstration', contact: 'Ciprian Gheordun', title: 'Descon Global CPO', email: 'ciprian.gheordun@descon.com' },
+    { name: 'Expro Worldwide BV - Qatar Branch', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Josly Ks', title: 'Senior Buyer', email: 'josly.ks@expro.com' },
+    { name: 'Hofincons Associates W.L.L.', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ISS INTERNATIONAL - Qatar W.L.L', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'L&T Energy Hydrocarbon', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Prepare and deliver executive platform demonstration', contact: 'Heramb Patil', title: 'Deputy General Manager Business Development Offshore', email: 'heramb.patil@larsentoubro.com' },
+    { name: 'Q-Airways', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Roger Davies', title: 'Chief Procurement Officer', email: 'rdavies@qatarairways.com.qa' },
+    { name: 'QTerminals', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Abdulhadi Fahad al Hajri', title: 'Hamad Port Strategic Projects Director', email: 'abdulhadi.hajri@qterminals.com' },
+    { name: 'Qatar Airways MRO', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Elmar Lutter', title: 'SVP — MRO', email: 'elmar.lutter@qatarairways.com.qa' },
+    { name: 'Qatar Power Engineering and Contracting', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Qatar Steel', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Abdulrahman Ali Al-abdulla', title: 'Managing Director & CEO', email: 'abdulrahman.alabdulla@qatarsteel.com.qa' },
+    { name: 'Sea Horizon Offshore Marine Services W.L.L', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Seaworks W.L.L', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Synergy Marine For Consulting And Maintenance', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TEXCEL OIL AND GAS', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Total Energies', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Luc Menager', title: '', email: 'luc.menager@totalenergies.com' },
+    { name: 'Weatherford', classification: 'Buyer', sector: 'Maintenance Service Provider', tier: 3, stage: 'Solution / POC', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: 'Remar Franco', title: 'Supply Chain Manager', email: 'remar.franco@weatherford.com' },
+    { name: 'Welltec', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Abdullah Osama Abdelwahed Osama Abdelwahed', title: 'Area Vice President Middle East', email: 'aabdelwahed@welltec.com' },
+    { name: 'ABL Marine Services', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL TAWFEEQ ENERGY SERVICES AND TRADING', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ASSOCIATED ENGINEERING TRADING AND CONTRACTING WLL', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'AcuTech Consulting LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Arab Center for Engineering Studies W.L.L', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Arkan Alarab Trading and Contracting and Construction L.L.C.', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'BLACK TECH OILFIELD SERVICES', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Barzan QS', classification: 'Buyer', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Ali Alsulaiti', title: 'BD Director', email: 'ali.alsulaiti@bqsolutions.qa' },
+    { name: 'Bourbon Gulf W.L.L.', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'CanAmSafety', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DOGUS CONSTRUCTION AND TRADE COMPANY', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'DOPET', classification: 'Both', sector: 'Oil & Gas Operator', tier: 2, stage: 'Lead', nextStep: 'Run targeted buyer acquisition campaign and qualify procurement need', contact: '', title: 'QHSE Manager of Bl gn og', email: 'assadsalem@dopet.com' },
+    { name: 'DSERV', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Osama Noba', title: 'Business Line Director', email: 'osama.noba@dserv.co' },
+    { name: 'Dayim Equipment Rental', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DicoTech Qatar', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Engineering Maintenance Company EMCO Qatar', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Subramani Dinesh', title: 'Head EMCO Qatar', email: 'dinesh@emcoqatar.net' },
+    { name: 'GULF ENGINEERING TRANSPORTATION & CONTRACTING WLL', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'GULF LABORATORIES CO. WLL', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'INTERSICA LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Intervention Solutions', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Infor Generic', title: '', email: 'info@intervention.solutions' },
+    { name: 'J MCINERNEY ACON', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Kentech Qatar Technical Services', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Share Kelly', title: 'Country Director', email: 'shane.kelly@kentplc.com' },
+    { name: 'M Cubed for Oil and Gas Services', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'MAN Enterprise Qatar WLL', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Megarme Doha Trading and Services', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Midmac Specialised Equipment Rental Co. WLL', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Modutec Services and Contracting W.L.L', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'NIMR Oil Well Maintenance WLL', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Northern Offshore Drilling Operations Ltd', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'OCSR Consultancy', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PORR Qatar Construction W.L.L.', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Petrochem Performance Chemicals WLL', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'QIPCO', classification: 'Buyer', sector: 'Industrial Asset Owner', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'S Abuodeh', title: '', email: 's.abuodeh@qipco.com.qa' },
+    { name: 'REV ONE POWER COMMISSIONING SERVICES AND CONTRACTING W.L.L', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SEASHORE ENGINEERINGAND CONTRACTING', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'SPIE Oil and Gas Services Doha W.L.L', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'STAPEM OFFSHORE ENERGY SERVICES', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Sheffield Energy LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Tadmur Contracting W.L.L', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Tekfen Construction & Installation Co., Inc. – Qatar Branch', classification: 'Both', sector: 'Integrated Service Company', tier: 2, stage: 'Lead', nextStep: 'Advance supplier through catalogue & ERP onboarding sequence', contact: '', title: '', email: '' },
+    { name: 'Unigaz Qatar', classification: 'Supplier', sector: 'Energy Company', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Ahmad Jouni', title: 'Country Manager', email: 'ahmad.jouni@unigaz.net' },
+    { name: 'Vulcain LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ADVANCE MECHANICAL TECHNOLOGY FOR TRADING AND CONTRACTING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL MAFYAR DRUMS FACTORY', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL YAMAMA PLASTIC FACTORY', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Arabian Projects Technical Services LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Beyond Lighting Factory for the manufacture of lighting units', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Bin Omran Group', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Black Cat Consulting & Engineering Services W.L.L.', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'CENTURY MECHANICAL SYSTEMS FACTORY', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DNV Doha LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DRILLCHEM OIL FIELD SERVICES TRADING', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DTA Qatar', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Ahmad Ahmad', title: '', email: 'ahmad@dta.qa' },
+    { name: 'Dynamic Inspection Services W.L.L.', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'EEW Steel QFZ LLC', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Emerald Driller Company', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Enereco Qatar Engineering & Consulting Office', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Fusion Outsourcing and Services', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'INSPECTA INTERNATIONAL', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'IRM ENERGY AND TECHNOLOGY SERVICES', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Place immediate outreach call within 5 business days', contact: '', title: '', email: '' },
+    { name: 'Inside Exploration Technologies WLL', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Jaida Energy', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Leroy Decosta', title: '', email: 'leroy.decosta@jaidahenergyllc.com' },
+    { name: 'MANWEIR LLC', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Oceaneering International GmbH', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Petserv', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Adeeb Adeeb', title: 'General Manager', email: 'adeeb@petserv.net' },
+    { name: 'QATAR BATTERY FACTORY', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SGS Qatar WLL', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SURVITEC SAFETY MARINE MAINTENANCE AND TRADING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Sievert International Inspection Co WLL', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Hossam Refaey', title: 'Area Chief Executive Qatar & Egypt', email: 'hossam.rafaey@bureauveritas.com' },
+    { name: 'Sinohydro Corporation Ltd', classification: 'Both', sector: 'EPC Contractor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Wang Xueyong', title: 'Country Manager', email: 'wangxueyong@sinohydro.com' },
+    { name: 'Suhail Metal Castings Factory', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Sustainable Environment for Environmental Services', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TRANS ASIA PIPELINE SERVICES SPECIALTY SERVICES', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TUBO Trading and Contracting W.L.L.', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Tech Mahindra Limited QFC branch', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Tubescope Oilfield Services', classification: 'Supplier', sector: 'Maintenance Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ABB E-mobility QFZ LLC', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ABS Qatar LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ACE Electric Services', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ADVANCED LINES COMPANY FOR TRADING & SERVICES', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL AMOUDI PLASTIC FACTORY', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL DANA SWITCHGEAR W.L.L', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL HAYA ENVIRO', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL HAYA PLASTIC FACTORY W.l.l', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL HAYA WASTE MANAGEMENT & PROJECTS CO. WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL HAYA WASTE TREATMENT FACTORY WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL MUSAIRIE TRADING AND CONTRACTING CO. QATAR W.L.L.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AL NOOR PLASTIC FACTORY', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ALWAJBA ALLOYS FACTORY', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AMAN STEEL FACTORY', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AMTECH LATHE GARAGE', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ATTS contracting and trading company', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Advanced Plastic Factory W.L.L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Ahmed Import and Export Services', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Air Resources Qatar CO WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Al Khalij Cement Company', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'AlRashid Trading and Contracting', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Alamara Steel Factory', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Alurays Middle East Lighting Manufacturing W. L. L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Anchorage Technical Services Trading and Contracting W.L.L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Andersen Middle East LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'BRAND EXPRESSION MEDIA AND ADVERTISING', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'BRIGHT ENGINEERING W.L.L.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'BRIGHTSPHERE Solutions Co. WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'BSL - BAE Systems Strategic Aerospace Services WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Becon', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Ankit Ankit', title: '', email: 'ankit@becon.com.qa' },
+    { name: 'Beyond Lighting', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Blue Icon Trading & Transportation', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Boecker Public Safety Services - Qatar', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Bright Nano Trading and Contracting W.L.L.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'CDM SMITH INC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'CLAY PONDS TRADING AND CONTRACTING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Consolidated Engineering Systems Co.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Culligan Gulf LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DALKIA US CHILLERS SERVICES WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DAR ALRAQMANA FOR INFORMATION TECHNOLOGY', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DEBAJ Industrial Services WLL', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DNV GL AS', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'DORIS Engineering QFC Branch', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'David Adamson and Partners Overseas', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Diploma Trading & Contracting', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Doha Projects', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Balaji', title: '', email: 'balaji@dohaprojects.com' },
+    { name: 'Dorman Smith Switchgear W.L.L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Dorsch Qatar', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Dutest Qatar WLL', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Dynamic Lead Trading QFZ LLC', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ECG Engineering Consultants Group-Qatar', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ELECTRO POWER SYSTEMS', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ELLISDON Q SERVICES ENTRPRISES', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ENSCO OFFSHORE INTERNATIONAL COMPANY', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ENVIROZONE QATAR', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Ejar Cranes And Equipment (Qatar) L.L.C', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Elite Chemical Technology Industries', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Ertibat Engineering', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Excellence Logging Services Qatar', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'FIRST OIL AND GAS SERVICES WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'FLUID TECH HYDRAULIC SERVICES AND TRADING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'FLUX FACTORY', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'FTI Consulting Qatar', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'FUSION Q TECHNOLOGY TRADING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Finetech Trading', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Fire Shield Metal Works', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Future Gate LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'G E T INTERNATIONAL OIL SERVICES LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'GARNET TECHNOLOGIES AND TRADING WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'GHAMDAN FOR INVESTMENT INDUSTRIAL PROJECTS', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Green Technology and Contracting Co. W.L.L.', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Gulf Core Trading and Maintenance Company', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'HOLIS MIDDLE EAST LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Hassad Food Company', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'IB TECHAR DIGITAL SOLUITONS', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'IECO Group (W.L.L)', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'INDO ARAB CONTRACTING & TRADING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'INGAZ TRADING CONTRACTING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Industrial Maintenance International Qatar', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Innovation Renewable Energy', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'JAMA PLASTIC INDUSTRIES FACTORY', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'JASSIM HASSAN AL THANI TRADING & CONTRACTING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'KAS Trading Scaffolding & Leasing WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'KINTEC GLOBAL WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'KLJ ORGANIC QATAR W.L.L.', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'LAFFAN RESIN PRODUCTION FACTORY', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'LINNK GROUP TECHNOLOGY CONSULTING TRADING AND CONTRACTING', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'LS Cable and System ltd', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'LUCK SWITCHGEAR', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'MAN ENERGY SOLUTIONS QATAR NAVIGATION WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'MANNAI TECHNOLOGIES W.L.L', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'MASTER SYSTEMS CALIBRATION SERVICES WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'MBM ENERGY W.L.L.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'MUSTAFAWI CAR RENTAL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Management and Consultancy Excellence Qatar Ltd.', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Marking Services and Trading Middle East W.L.L.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Mediterranean Equipment & Contracting', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Middle East Traffic Consulting L.L.C', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Muhibbah Engineering Middle East LLC', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'NASK GEOTEXTILE INDUSTRIES', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'NEGEM METAL BUILDINGS FACTORY', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'NEMER METAL INDUSTRIES FACTORY', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'NES OVERSEAS - QATAR', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'NORDIQA SERVICES and TRADING W.L.L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Nasser Bin Nawaf and Partners Holding Company W.L.L.', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'National Factory for copper and aluminum', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Navigation Marine Services Center', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'New Era Controls Co. W.L.L', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Newtech International Co. WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'OCEAN POWER MARINE EQUIPMENT W L L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Ocean Offshore Support Trading and Contracting and Services', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Oliver Wyman LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PALFINGER MARINE DOHA WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PALLAI INTERNATIONAL KITCHEN WORKSHOP', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PGP ENERGIES TRADING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PRINCES LIGHTS COMPANY', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PROZ Technologies', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Power Systems and Information Technology', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Primepower Middle East', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'PwC Legal Middle East LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'QATAR NATIONAL PLASTIC FACTORY W.L.L.', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'QATAR TECHNICAL INTERNATIONAL METAL INDUSTRIES', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'QPLASTICS FACTORY W.L.L.', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Acids company', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Building Company Steel Engineering Workshop', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Company for Pharmaceutical Industry', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Factory for Gas and Petroleum Equipment W.l.l', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar National Broadband Network', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Navigation Q.P.S.C.', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Plastic Additives & Industries Group', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Qatar Reliant Engineering Services', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Quantex Qatar L.L.C.', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'RAK DETERGENTS FACTORY', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'RAMAAL PROJECTS', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'REMOTE SITE MIDDLE EAST TRADING CONTRACTING & SERVICES', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'ROZA HASSAD', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Rapport trading and contracting WLL', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Ras Trading & Services Consultancy', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Rnyn Llatsalat Waltjarh Walkhdmat Al-amh', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Rosetti Marino Qatar Branch', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SARENS GULF TRADING AND SERVICES AND EQUIPMENT', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SAUR SAS', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SIGMA OILFIELD SOLUTION', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SUHAIL BATTERY RECYCLING FACTORY', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'SUHAIL METAL FORMINGS', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Sendian integrated security service', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Severn Glocon Qatar', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Spades Trading', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Specialized Oil Services (TAQA)', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Sulzer Rotating Equipment Services WLL', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TEMCO ELECTROMECHANICAL TRADING AND CONTRACTING W.L.L', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TEYSEER TRADING & CONTRACTING COMPANY', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TRISTAR TRANSPORT QATAR', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TSS Qatar', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Juby Juby', title: '', email: 'juby@tssqatar.com' },
+    { name: 'TUV NORD GULF', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Taihan Cable and Solution Co. Ltd', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Talal Bin Mohammed Hotel', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Taurus Engineering Workshop', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Traffic Management Solution', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'UNIFCO W.L.L', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'UNITED CHEMICALS', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'VATECH WABAG LIMITED', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'VYSUS LLC', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Vitae Auctus', classification: 'Supplier', sector: 'Engineering Service Provider', tier: 3, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: 'Swaraj Auctus', title: 'CEO', email: 'swaraj@vitaeauctusfmc.com' },
+    { name: 'WELLSANAM SERVICE AND TRADING', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'WORLD PLASTIC FOR TRADING', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'Walco Technical Supplies And Projects', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'West Bay Petrol Station', classification: 'Supplier', sector: 'Distributor', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'arrow heat exchanger Factory', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'convosync Llhlwl AL-Taqnyh', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'international welding rods factory', classification: 'Supplier', sector: 'MRO Supplier', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'StatGroup', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'TRACS  (POC)', classification: 'Supplier', sector: 'OEM', tier: 2, stage: 'Lead', nextStep: 'Continue digital nurture sequence (email / content / events)', contact: '', title: '', email: '' },
+    { name: 'COSMOZ TRADING AND CONTRACTING', classification: 'Supplier', sector: 'Distributor', tier: 3, stage: 'Qualify', nextStep: 'Assign named account owner', contact: '', title: '', email: '' },
+    { name: 'Pipeline Technologies', classification: 'Supplier', sector: 'Distributor', tier: 3, stage: 'Qualify', nextStep: 'Assign named account owner', contact: '', title: '', email: '' },
+    { name: 'FLOWTRONIX', classification: 'Supplier', sector: 'Distributor', tier: 3, stage: 'Qualify', nextStep: 'Assign named account owner', contact: '', title: '', email: '' },
+    { name: 'Edge Engineering Trading', classification: 'Supplier', sector: 'Distributor', tier: 3, stage: 'Qualify', nextStep: 'Assign named account owner', contact: '', title: '', email: '' },
+    { name: 'Super Technical Enterprises', classification: 'Supplier', sector: 'Distributor', tier: 3, stage: 'Qualify', nextStep: 'Assign named account owner', contact: '', title: '', email: '' },
+    { name: 'Technical Supplies & Services Co.', classification: 'Supplier', sector: 'Distributor', tier: 3, stage: 'Qualify', nextStep: 'Assign named account owner', contact: '', title: '', email: '' },
+  ];
+
   function buildSupplierAccounts(){
     return SUPPLIER_SEED.map(function(s){
       var activities = [{
@@ -423,7 +739,48 @@
         ecifSponsor: '',
         ecifFundingRequested: '',
         ecifFundingApproved: '',
+        acv: null,
+        updatedAt: todayStr(),
         contacts: [],
+        createdAt: todayStr(),
+        activities: activities
+      };
+    });
+  }
+
+
+  function buildFullImportAccounts(){
+    return FULL_IMPORT_SEED.map(function(s){
+      var contactLine = s.contact ? (s.contact + (s.title ? ', ' + s.title : '')) : 'No named contact on file';
+      var activities = [{
+        id: uid(), type: 'Document', date: todayStr(),
+        title: 'Sourced from ADAPT Sales Funnel Tracker (full pipeline import)',
+        notes: 'Sourced from ADAPT Sales Funnel Tracker (9 July 2026). Contact: ' + contactLine + '.',
+        link: ''
+      }];
+      var contacts = [];
+      if (s.contact) {
+        contacts.push({ name: s.contact, title: s.title || '', email: s.email || '', phone: '', role: 'Decision maker' });
+      }
+      return {
+        id: uid(),
+        name: s.name,
+        tier: s.tier,
+        stage: s.stage,
+        owner: '',
+        msCosell: false,
+        classification: s.classification || 'Buyer',
+        sector: s.sector,
+        nextStep: s.nextStep || 'Assign named account owner',
+        nextStepDate: '',
+        ecifStatus: s.classification === 'Supplier' ? 'Not applicable' : 'Not started',
+        ecifScore: null,
+        ecifSponsor: '',
+        ecifFundingRequested: '',
+        ecifFundingApproved: '',
+        acv: null,
+        updatedAt: todayStr(),
+        contacts: contacts,
         createdAt: todayStr(),
         activities: activities
       };
@@ -462,6 +819,8 @@
         ecifSponsor: '',
         ecifFundingRequested: '',
         ecifFundingApproved: '',
+        acv: null,
+        updatedAt: todayStr(),
         contacts: [],
         createdAt: todayStr(),
         activities: activities
@@ -509,28 +868,88 @@
     return account;
   }
 
+  var IMPORT_FLAGS_KEY = 'adapt-pipeline-import-flags';
+
+  function showLoadErrorBanner(){
+    var el = document.getElementById('at-load-error-banner');
+    if(el) el.style.display = 'block';
+  }
+  function hideLoadErrorBanner(){
+    var el = document.getElementById('at-load-error-banner');
+    if(el) el.style.display = 'none';
+  }
+
+  async function loadImportFlags(){
+    try {
+      var res = await window.storage.get(IMPORT_FLAGS_KEY, true);
+      return res && res.value ? JSON.parse(res.value) : {};
+    } catch(e){ return {}; }
+  }
+
+  async function saveImportFlags(flags){
+    try {
+      await window.storage.set(IMPORT_FLAGS_KEY, JSON.stringify(flags), true);
+    } catch(e){
+      console.error('Storage error', e);
+    }
+  }
+
   async function load(){
+    var fetchFailed = false;
     try {
       var res = await window.storage.get(STORAGE_KEY, true);
       accounts = res && res.value ? JSON.parse(res.value) : [];
     } catch(e){
       accounts = [];
+      fetchFailed = true;
+      console.error('ADAPT tracker: failed to read account data from storage.', e);
     }
-    if (accounts.length === 0) {
-      accounts = buildSeedAccounts();
+
+    var flags = await loadImportFlags();
+    var flagsChanged = false;
+
+    // Safety guard: if reading the account data threw an error at all, stop here.
+    // Do NOT proceed to re-seed or save — a failed read must never be treated as
+    // "the tracker is genuinely empty," since that would overwrite real shared
+    // data with nothing. This check does not depend on the import flags, because
+    // a total outage could cause that read to fail too.
+    if (fetchFailed) {
+      showLoadErrorBanner();
+      return;
     }
-    var existingNames = accounts.map(function(a){ return a.name; });
-    var newSuppliers = buildSupplierAccounts().filter(function(a){
-      return existingNames.indexOf(a.name) === -1;
-    });
-    if (newSuppliers.length > 0) {
+    hideLoadErrorBanner();
+
+    if (!flags.baseSeedDone) {
+      var existingNames0 = accounts.map(function(a){ return a.name; });
+      var newBase = buildSeedAccounts().filter(function(a){ return existingNames0.indexOf(a.name) === -1; });
+      accounts = accounts.concat(newBase);
+      flags.baseSeedDone = true;
+      flagsChanged = true;
+    }
+
+    if (!flags.supplierSeedDone) {
+      var existingNames1 = accounts.map(function(a){ return a.name; });
+      var newSuppliers = buildSupplierAccounts().filter(function(a){ return existingNames1.indexOf(a.name) === -1; });
       accounts = accounts.concat(newSuppliers);
+      flags.supplierSeedDone = true;
+      flagsChanged = true;
     }
+
+    if (!flags.fullImportDone) {
+      var existingNames2 = accounts.map(function(a){ return a.name; });
+      var newFull = buildFullImportAccounts().filter(function(a){ return existingNames2.indexOf(a.name) === -1; });
+      accounts = accounts.concat(newFull);
+      flags.fullImportDone = true;
+      flagsChanged = true;
+    }
+
     accounts = accounts.map(function(a){
       a = migrateClassification(a);
       return migrateContactsFromActivities(a);
     });
+
     await save();
+    if (flagsChanged) await saveImportFlags(flags);
     render();
   }
 
@@ -582,6 +1001,7 @@
     var tier = document.getElementById('at-filter-tier').value;
     var cosell = document.getElementById('at-filter-cosell').value;
     var ecif = document.getElementById('at-filter-ecif').value;
+    var rag = document.getElementById('at-filter-rag').value;
     var search = document.getElementById('at-filter-search').value.toLowerCase();
     return accounts.filter(function(a){
       if(cls && a.classification !== cls) return false;
@@ -589,6 +1009,7 @@
       if(cosell === 'yes' && !a.msCosell) return false;
       if(cosell === 'no' && a.msCosell) return false;
       if(ecif && (a.ecifStatus || 'Not applicable') !== ecif) return false;
+      if(rag && computeRag(a) !== rag) return false;
       if(search && (a.name + ' ' + a.owner).toLowerCase().indexOf(search) === -1) return false;
       return true;
     });
@@ -603,12 +1024,33 @@
     var ecifActive = accounts.filter(function(a){
       return ['Nominated','Approved','In delivery','PoE submitted','Paid & converted'].indexOf(a.ecifStatus) !== -1;
     }).length;
+
+    var potentialValue = accounts.filter(function(a){
+      return a.stage !== 'Closed Won' && a.stage !== 'Closed Lost' && a.acv != null;
+    }).reduce(function(sum, a){ return sum + a.acv; }, 0);
+    var realisedValue = accounts.filter(function(a){
+      return a.stage === 'Closed Won' && a.acv != null;
+    }).reduce(function(sum, a){ return sum + a.acv; }, 0);
+
+    var won = accounts.filter(function(a){ return a.stage === 'Closed Won'; }).length;
+    var lost = accounts.filter(function(a){ return a.stage === 'Closed Lost'; }).length;
+    var conversionText = (won + lost) === 0 ? '—' : Math.round((won / (won + lost)) * 100) + '%';
+
+    var updatedRecently = accounts.filter(function(a){
+      var lastTouch = a.updatedAt || a.createdAt;
+      return lastTouch && -daysUntil(lastTouch) <= 7;
+    }).length;
+
     el.innerHTML =
       '<div class="at-metric"><div class="n">' + total + '</div><div class="l">Total accounts</div></div>' +
       '<div class="at-metric"><div class="n">' + t1 + '</div><div class="l">Tier 1</div></div>' +
       '<div class="at-metric"><div class="n">' + cosell + '</div><div class="l">MS co-sell registered</div></div>' +
       '<div class="at-metric"><div class="n">' + ecifActive + '</div><div class="l">ECIF nominated+</div></div>' +
-      '<div class="at-metric"><div class="n">' + open + '</div><div class="l">Open in pipeline</div></div>';
+      '<div class="at-metric"><div class="n">' + open + '</div><div class="l">Open in pipeline</div></div>' +
+      '<div class="at-metric"><div class="n">' + fmtQAR(potentialValue) + '</div><div class="l">Potential value (open)</div></div>' +
+      '<div class="at-metric"><div class="n">' + fmtQAR(realisedValue) + '</div><div class="l">Realised value (won)</div></div>' +
+      '<div class="at-metric"><div class="n">' + conversionText + '</div><div class="l">Conversion rate (won / decided)</div></div>' +
+      '<div class="at-metric"><div class="n">' + updatedRecently + '</div><div class="l">Updated in last 7 days</div></div>';
   }
 
   function nodesHtml(a){
@@ -627,6 +1069,21 @@
     var today = new Date();
     today.setHours(0,0,0,0);
     return Math.round((d - today) / 86400000);
+  }
+
+  function computeRag(a){
+    var closed = (a.stage === 'Closed Won' || a.stage === 'Closed Lost');
+    var overdue = !!(a.nextStepDate && !closed && daysUntil(a.nextStepDate) < 0);
+    var lastTouch = a.updatedAt || a.createdAt;
+    var sinceUpdate = lastTouch ? -daysUntil(lastTouch) : 999;
+    if(overdue || sinceUpdate > 30) return 'red';
+    if(sinceUpdate > 7) return 'amber';
+    return 'green';
+  }
+
+  function fmtQAR(n){
+    if(n == null || isNaN(n)) return 'QAR 0';
+    return 'QAR ' + Math.round(n).toLocaleString('en-US');
   }
 
   function collectActions(){
@@ -653,6 +1110,48 @@
 
   var actionsPanelCollapsed = false;
 
+  function collectRecentlyCompleted(){
+    var items = [];
+    accounts.forEach(function(a){
+      (a.activities || []).forEach(function(act){
+        if(act.done && act.completedAt){
+          var since = -daysUntil(act.completedAt);
+          if(since >= 0 && since <= 7){
+            items.push({
+              accountId: a.id, accountName: a.name, title: act.title,
+              type: act.type, completedAt: act.completedAt, notes: act.notes
+            });
+          }
+        }
+      });
+    });
+    items.sort(function(x, y){ return x.completedAt < y.completedAt ? 1 : (x.completedAt > y.completedAt ? -1 : 0); });
+    return items;
+  }
+
+  function openCompletedReviewModal(){
+    var items = collectRecentlyCompleted();
+    var c = document.getElementById('at-modal-container');
+    var listHtml = items.length === 0
+      ? '<div class="at-hint" style="padding:10px 0;">No actions marked done in the last 7 days.</div>'
+      : items.map(function(item){
+          return '<div class="at-completed-row">' +
+            '<span class="cdate">' + escapeHtml(fmtDate(item.completedAt)) + '</span>' +
+            '<span class="ccompany">' + escapeHtml(item.accountName) + '</span>' +
+            '<div class="cdesc"><strong>' + escapeHtml(item.title) + '</strong>' +
+            (item.notes ? '<div>' + escapeHtml(item.notes) + '</div>' : '') + '</div>' +
+            '</div>';
+        }).join('');
+    c.innerHTML =
+      '<div class="at-modal-bg" id="at-bg-completed"><div class="at-modal" style="position:relative; max-width:600px;">' +
+      '<button class="at-close" id="at-close-completed">&times;</button>' +
+      '<h3>Completed in the last 7 days (' + items.length + ')</h3>' +
+      '<div style="max-height:400px; overflow-y:auto;">' + listHtml + '</div>' +
+      '</div></div>';
+    document.getElementById('at-close-completed').onclick = closeModal;
+    document.getElementById('at-bg-completed').addEventListener('click', function(e){ if(e.target.id === 'at-bg-completed') closeModal(); });
+  }
+
   function renderActionsPanel(){
     var body = document.getElementById('at-actions-body');
     var countsEl = document.getElementById('at-actions-counts');
@@ -673,9 +1172,7 @@
       var d = daysUntil(item.date);
       var cls = d < 0 ? 'overdue' : (d <= 3 ? 'soon' : 'later');
       var label = d < 0 ? (Math.abs(d) + 'd overdue') : (d === 0 ? 'Today' : (d === 1 ? 'Tomorrow' : fmtDate(item.date)));
-      var doneBtn = item.kind === 'activity'
-        ? '<button class="adone-btn" data-account="' + item.accountId + '" data-activity="' + item.activityId + '">Mark done</button>'
-        : '';
+      var doneBtn = '<button class="adone-btn" data-account="' + item.accountId + '" data-activity="' + (item.activityId || '') + '" data-kind="' + item.kind + '">Mark done</button>';
       return '<div class="at-action-row ' + cls + '" data-account="' + item.accountId + '" data-kind="' + item.kind + '">' +
         '<span class="bar"></span>' +
         '<span class="adate">' + escapeHtml(label) + '</span>' +
@@ -702,14 +1199,28 @@
       btn.addEventListener('click', function(e){
         e.stopPropagation();
         var accId = btn.getAttribute('data-account');
-        var actId = btn.getAttribute('data-activity');
+        var kind = btn.getAttribute('data-kind');
         var acc = accounts.find(function(a){ return a.id === accId; });
         if(!acc) return;
-        var act = acc.activities.find(function(x){ return x.id === actId; });
-        if(!act) return;
-        act.done = true;
+        if(kind === 'activity'){
+          var actId = btn.getAttribute('data-activity');
+          var act = acc.activities.find(function(x){ return x.id === actId; });
+          if(!act) return;
+          act.done = true;
+          act.completedAt = todayStr();
+        } else if(kind === 'nextstep'){
+          acc.activities.push({
+            id: uid(), type: 'Discussion', date: todayStr(),
+            title: 'Completed: ' + (acc.nextStep || 'Next step'),
+            notes: acc.nextStepDate ? ('Originally due ' + fmtDate(acc.nextStepDate) + '.') : '',
+            link: '', dueDate: null, done: true, completedAt: todayStr()
+          });
+          acc.nextStep = '';
+          acc.nextStepDate = '';
+        }
+        acc.updatedAt = todayStr();
         save();
-        renderActionsPanel();
+        render();
       });
     });
   }
@@ -736,10 +1247,13 @@
         var ecifHtml = (ecifStatus === 'Not applicable' || ecifStatus === 'Not started')
           ? ''
           : '<span class="at-ecif ' + ecifBadgeClass(ecifStatus) + '">ECIF: ' + escapeHtml(ecifStatus) + '</span>';
+        var ragClass = computeRag(a);
         card.innerHTML =
+          '<span class="at-rag-dot ' + ragClass + '" title="' + (ragClass === 'red' ? 'Overdue action or no update in 30+ days' : ragClass === 'amber' ? 'Not updated in over a week' : 'Updated within the last 7 days') + '"></span>' +
           '<div class="nm">' + escapeHtml(a.name) + '</div>' +
           '<div class="meta"><span class="at-class ' + classBadgeClass(a.classification) + '">' + escapeHtml(a.classification || 'Buyer') + '</span><span class="at-tier at-tier' + a.tier + '">Tier ' + a.tier + '</span> &middot; ' + escapeHtml(a.owner || 'Unassigned') + '</div>' +
           (a.nextStep ? '<div class="meta">Next: ' + escapeHtml(a.nextStep) + (a.nextStepDate ? ' (' + fmtDate(a.nextStepDate) + ')' : '') + '</div>' : '') +
+          (a.acv != null ? '<div class="meta">Est. ACV: ' + fmtQAR(a.acv) + '</div>' : '') +
           nodesHtml(a) + ecifHtml;
         card.addEventListener('click', function(){ openDetail(a.id); });
         col.appendChild(card);
@@ -785,6 +1299,7 @@
         '<div class="at-field"><label>Sector</label><select id="af-sector">' + buildSectorOptionsHtml('') + '</select></div>' +
       '</div>' +
       '<div class="at-field"><label>ECIF status</label><select id="af-ecif">' + ECIF_STATUSES.map(function(s){return '<option value="'+s+'"'+(s==='Not applicable'?' selected':'')+'>'+s+'</option>';}).join('') + '</select></div>' +
+      '<div class="at-field"><label>Est. Annual Contract Value (QAR)</label><input id="af-acv" type="number" min="0" step="1000" placeholder="e.g. 250000" /></div>' +
       '<div class="at-field"><label>Next step</label><input id="af-nextstep" type="text" placeholder="e.g. Schedule discovery call" /></div>' +
       '<div class="at-field"><label>Next step date</label><input id="af-nextdate" type="date" /></div>' +
       '<div class="at-modal-actions">' +
@@ -815,6 +1330,8 @@
         ecifSponsor: '',
         ecifFundingRequested: '',
         ecifFundingApproved: '',
+        acv: document.getElementById('af-acv').value === '' ? null : Math.max(0, parseFloat(document.getElementById('af-acv').value)),
+        updatedAt: todayStr(),
         contacts: [],
         createdAt: todayStr(),
         activities: []
@@ -925,6 +1442,7 @@
         });
       });
       a.contacts = updated;
+      a.updatedAt = todayStr();
       save();
       render();
       closeModal();
@@ -958,7 +1476,9 @@
         '<div class="at-field"><label>Funding requested</label><input id="dd-ecif-requested" type="text" placeholder="e.g. USD 40,000" /></div>' +
         '<div class="at-field"><label>Funding approved</label><input id="dd-ecif-approved" type="text" placeholder="e.g. USD 30,000" /></div>' +
       '</div>' +
-      '<div class="at-hint">Added ' + fmtDate(a.createdAt) + '</div>' +
+      '<div class="at-section-label">Commercial</div>' +
+      '<div class="at-field"><label>Est. Annual Contract Value (QAR)</label><input id="dd-acv" type="number" min="0" step="1000" placeholder="e.g. 250000" /></div>' +
+      '<div class="at-hint">Added ' + fmtDate(a.createdAt) + (a.updatedAt ? ' &middot; Last updated ' + fmtDate(a.updatedAt) : '') + '</div>' +
       '<div class="at-modal-actions">' +
         '<button class="at-btn secondary at-danger" id="dd-delete">Remove account</button>' +
         '<button class="at-btn" id="dd-save">Save changes</button>' +
@@ -974,6 +1494,7 @@
     document.getElementById('dd-ecif-sponsor').value = a.ecifSponsor || '';
     document.getElementById('dd-ecif-requested').value = a.ecifFundingRequested || '';
     document.getElementById('dd-ecif-approved').value = a.ecifFundingApproved || '';
+    document.getElementById('dd-acv').value = a.acv != null ? a.acv : '';
 
     document.getElementById('dd-save').onclick = function(){
       a.tier = parseInt(document.getElementById('dd-tier').value, 10);
@@ -990,6 +1511,9 @@
       a.ecifSponsor = document.getElementById('dd-ecif-sponsor').value.trim();
       a.ecifFundingRequested = document.getElementById('dd-ecif-requested').value.trim();
       a.ecifFundingApproved = document.getElementById('dd-ecif-approved').value.trim();
+      var acvVal = document.getElementById('dd-acv').value;
+      a.acv = acvVal === '' ? null : Math.max(0, parseFloat(acvVal));
+      a.updatedAt = todayStr();
       save();
       render();
       closeModal();
@@ -1053,6 +1577,7 @@
         dueDate: dueDate || null,
         done: false
       });
+      a.updatedAt = todayStr();
       save();
       openDetail(a.id);
     };
@@ -1103,11 +1628,19 @@
   document.getElementById('at-filter-tier').addEventListener('change', renderBoard);
   document.getElementById('at-filter-cosell').addEventListener('change', renderBoard);
   document.getElementById('at-filter-ecif').addEventListener('change', renderBoard);
+  document.getElementById('at-filter-rag').addEventListener('change', renderBoard);
   document.getElementById('at-filter-search').addEventListener('input', renderBoard);
 
   document.getElementById('at-actions-toggle').addEventListener('click', function(){
     actionsPanelCollapsed = !actionsPanelCollapsed;
     renderActionsPanel();
+  });
+  document.getElementById('at-review-completed').addEventListener('click', function(e){
+    e.stopPropagation();
+    openCompletedReviewModal();
+  });
+  document.getElementById('at-load-retry').addEventListener('click', function(){
+    load();
   });
 
   load();
