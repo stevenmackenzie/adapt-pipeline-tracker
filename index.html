@@ -369,6 +369,43 @@
     }
   }
 
+  // ---- Investor dashboard: resourcing model ----
+  // Modelled effort per open account per month, by stage. Used to estimate
+  // how many FTEs are needed to properly work the current funnel.
+  var HOURS_PER_STAGE = {
+    'Lead': 0.5, 'Qualify': 2, 'Discover': 4, 'Solution / POC': 10,
+    'Proposal': 6, 'Negotiate': 8, 'Closed Won': 0, 'Closed Lost': 0
+  };
+  var FTE_CAPACITY_HOURS = 100; // effective client-facing hours/month per FTE, after admin/travel/internal
+  var REVENUE_TARGET = 18000000; // QAR, 2-year modelled target
+  var TARGET_MONTHS = 24;
+  var CLOSE_RATE_SCENARIOS = [4, 6, 8]; // deals closed per rep per year (conservative/base/optimistic)
+
+  var HEADCOUNT_KEY = 'adapt-pipeline-sales-headcount';
+  var currentHeadcount = 1;
+  var headcountLoadFailed = false;
+
+  async function loadHeadcount(){
+    try {
+      var res = await window.storage.get(HEADCOUNT_KEY, true);
+      currentHeadcount = res && res.value ? JSON.parse(res.value) : 1;
+      headcountLoadFailed = false;
+    } catch(e){
+      headcountLoadFailed = true;
+      console.error('ADAPT tracker: failed to read sales headcount from storage.', e);
+    }
+  }
+
+  async function saveHeadcount(n){
+    try {
+      await window.storage.set(HEADCOUNT_KEY, JSON.stringify(n), true);
+      return true;
+    } catch(e){
+      console.error('Storage error', e);
+      return false;
+    }
+  }
+
   function buildClassOptionsHtml(current){
     var opts = '';
     var matched = false;
@@ -1056,6 +1093,7 @@
     await save();
     if (flagsChanged) await saveImportFlags(flags);
     await loadCommentary();
+    await loadHeadcount();
     render();
   }
 
@@ -1244,6 +1282,39 @@
     });
     funnelHtml += '</div>';
 
+    // ---- Resourcing required ----
+    var totalMonthlyHours = 0;
+    STAGES.filter(function(s){ return s !== 'Closed Won' && s !== 'Closed Lost'; }).forEach(function(s){
+      totalMonthlyHours += (stageCounts[s] || 0) * (HOURS_PER_STAGE[s] || 0);
+    });
+    var workloadFtes = totalMonthlyHours / FTE_CAPACITY_HOURS;
+    var blendedAcvOpen = open.length > 0 ? totalValue / open.length : 0;
+    var dealsNeeded = blendedAcvOpen > 0 ? REVENUE_TARGET / blendedAcvOpen : 0;
+    var repRows = CLOSE_RATE_SCENARIOS.map(function(rate){
+      var repsNeeded = dealsNeeded / (rate * (TARGET_MONTHS / 12));
+      return '<tr><td>' + rate + ' deals/rep/year</td><td>' + Math.round(repsNeeded * 10) / 10 + '</td></tr>';
+    }).join('');
+    var gap = Math.max(0, Math.round(workloadFtes - currentHeadcount));
+
+    var resourcingHtml = '<div class="at-dash-section">' +
+      '<h3>Resourcing required<span class="at-modelled-tag">MODELLED</span></h3>' +
+      '<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:13px;">' +
+        '<label for="at-headcount-input" style="font-weight:bold; color:#333;">Current sales headcount:</label>' +
+        '<input type="number" min="0" step="1" id="at-headcount-input" value="' + currentHeadcount + '"' +
+        (headcountLoadFailed ? ' disabled' : '') +
+        ' style="width:60px; padding:4px 8px; border:1px solid #D0C4E0; border-radius:6px; font-size:13px;">' +
+      '</div>' +
+      '<div class="at-dash-kpirow" style="margin-bottom:14px;">' +
+        '<div class="at-dash-kpi"><div class="n">' + Math.round(totalMonthlyHours) + ' hrs</div><div class="l">Monthly effort to work current funnel</div></div>' +
+        '<div class="at-dash-kpi accent"><div class="n">' + (Math.round(workloadFtes * 10) / 10) + '</div><div class="l">FTEs needed &mdash; workload basis</div></div>' +
+        '<div class="at-dash-kpi"><div class="n">' + currentHeadcount + '</div><div class="l">Current headcount</div></div>' +
+        '<div class="at-dash-kpi' + (gap > 0 ? ' accent' : '') + '"><div class="n">' + (gap > 0 ? '+' + gap : '0') + '</div><div class="l">Modelled gap</div></div>' +
+      '</div>' +
+      '<div style="font-size:12px; color:#6B6B6B; margin-bottom:10px;">Second check, working back from a QAR ' + Math.round(REVENUE_TARGET/1000000) + 'M / ' + TARGET_MONTHS + '-month revenue target at a blended ACV of ' + fmtQAR(blendedAcvOpen) + ':</div>' +
+      '<table class="at-cycle-table" style="margin-bottom:12px;"><tr><th>Assumed close rate</th><th>Reps needed</th></tr>' + repRows + '</table>' +
+      '<div style="font-size:12px; color:#6B6B6B;">Recommended mix, not identical reps: an SDR/BDR to carry Lead-stage volume, 1&ndash;2 AEs to own Qualify&rarr;Negotiate and the revenue quota, and a (often part-time) sales engineer for Solution/POC technical support.</div>' +
+    '</div>';
+
     var cycleHtml = '<div class="at-dash-section"><h3>Modelled sales cycle &amp; win probability by stage<span class="at-modelled-tag">MODELLED</span></h3>' +
       '<table class="at-cycle-table"><tr><th>Stage</th><th>Win probability</th><th>Est. months to close</th></tr>' +
       STAGES.filter(function(s){ return s !== 'Closed Won' && s !== 'Closed Lost'; }).map(function(s){
@@ -1284,8 +1355,20 @@
       '</div>' +
     '</div>';
 
-    el.innerHTML = kpiHtml + valueChartHtml + funnelHtml + cycleHtml + assumptionsHtml + commentaryHtml;
+    el.innerHTML = kpiHtml + valueChartHtml + funnelHtml + cycleHtml + resourcingHtml + assumptionsHtml + commentaryHtml;
     renderValueChart(monthLabels, monthlySeries);
+
+    if(!headcountLoadFailed){
+      var hcInput = document.getElementById('at-headcount-input');
+      if(hcInput){
+        hcInput.addEventListener('change', async function(){
+          var n = Math.max(0, parseInt(hcInput.value, 10) || 0);
+          currentHeadcount = n;
+          await saveHeadcount(n);
+          renderDashboard();
+        });
+      }
+    }
 
     if(!commentaryLoadFailed){
       document.getElementById('at-cm-save').addEventListener('click', async function(){
