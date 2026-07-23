@@ -6,6 +6,7 @@
 <title>ADAPT Pipeline Tracker</title>
 <script src="msal-browser.min.js"></script>
 <script src="storage-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 <body style="margin:0; background:#fafafa; font-family: Arial, Helvetica, sans-serif;">
 <div style="max-width:1200px; margin:0 auto; padding:16px 16px 0;">
@@ -1178,17 +1179,32 @@
     var stageCounts = {};
     STAGES.forEach(function(s){ stageCounts[s] = 0; });
 
+    // Fixed Jan 2026 - Dec 2027 window for the value-realised chart, per the
+    // calendar-year framing requested for this view.
+    var CHART_START_YEAR = 2026, CHART_MONTHS = 24;
+    var monthlySeries = new Array(CHART_MONTHS).fill(0);
+    var monthLabels = [];
+    for(var mi = 0; mi < CHART_MONTHS; mi++){
+      var yy = CHART_START_YEAR + Math.floor(mi / 12);
+      var mm = (mi % 12) + 1;
+      monthLabels.push(String(mm).padStart(2,'0') + '-' + yy);
+    }
+
     open.forEach(function(a){
       var val = accountValue(a);
       var model = STAGE_MODEL[a.stage] || { probability: 0, monthsToClose: 0 };
       var w = val * model.probability;
       totalValue += val;
       totalWeighted += w;
-      var closeYear = addMonths(today, model.monthsToClose).getFullYear();
+      var closeDate = addMonths(today, model.monthsToClose);
+      var closeYear = closeDate.getFullYear();
       if(closeYear <= 2026) weighted2026 += w;
       else if(closeYear === 2027) weighted2027 += w;
       else weightedBeyond += w;
       stageCounts[a.stage] = (stageCounts[a.stage] || 0) + 1;
+
+      var slotIndex = (closeYear - CHART_START_YEAR) * 12 + closeDate.getMonth();
+      if(slotIndex >= 0 && slotIndex < CHART_MONTHS) monthlySeries[slotIndex] += w;
     });
 
     var blendedProbability = totalValue > 0 ? Math.round((totalWeighted / totalValue) * 100) : 0;
@@ -1203,6 +1219,18 @@
         '<div class="at-dash-kpi"><div class="n">' + blendedProbability + '%</div><div class="l">Blended weighted probability</div><div class="sub">modelled</div></div>' +
         '<div class="at-dash-kpi"><div class="n">~14 mo</div><div class="l">Modelled sales cycle (lead&rarr;close)</div><div class="sub">no closed deals yet to measure actuals</div></div>' +
       '</div>';
+
+    var valueChartHtml = '<div class="at-dash-section">' +
+      '<h3>Value realised &mdash; 2026 &amp; 2027<span class="at-modelled-tag">MODELLED</span></h3>' +
+      '<div style="font-size:12px; color:#6B6B6B; margin-bottom:10px;">Modelled from current pipeline stage and assumed close timing &mdash; will sharpen as deals progress and real close dates are confirmed.</div>' +
+      '<div style="display:flex; gap:8px; margin-bottom:10px;">' +
+        '<button class="at-btn secondary" id="at-vc-cumulative" style="padding:4px 12px; font-size:12px;">Cumulative</button>' +
+        '<button class="at-btn secondary" id="at-vc-monthly" style="padding:4px 12px; font-size:12px;">Monthly</button>' +
+      '</div>' +
+      '<div style="position:relative; width:100%; height:260px;">' +
+        '<canvas id="at-value-chart" role="img" aria-label="Chart of modelled pipeline value realised across 2026 and 2027"></canvas>' +
+      '</div>' +
+    '</div>';
 
     var funnelHtml = '<div class="at-dash-section"><h3>Where accounts sit in the sales process</h3>';
     STAGES.filter(function(s){ return s !== 'Closed Won' && s !== 'Closed Lost'; }).forEach(function(s){
@@ -1256,7 +1284,8 @@
       '</div>' +
     '</div>';
 
-    el.innerHTML = kpiHtml + funnelHtml + cycleHtml + assumptionsHtml + commentaryHtml;
+    el.innerHTML = kpiHtml + valueChartHtml + funnelHtml + cycleHtml + assumptionsHtml + commentaryHtml;
+    renderValueChart(monthLabels, monthlySeries);
 
     if(!commentaryLoadFailed){
       document.getElementById('at-cm-save').addEventListener('click', async function(){
@@ -1268,6 +1297,71 @@
         var ok = await saveCommentary();
         statusEl.textContent = ok ? 'Saved.' : 'Could not save \u2014 try again.';
       });
+    }
+  }
+
+  var valueChartInstance = null;
+  var valueChartMode = 'cumulative';
+
+  function renderValueChart(labels, monthlyVals){
+    var canvas = document.getElementById('at-value-chart');
+    if(!canvas || typeof Chart === 'undefined') return;
+
+    var cumulativeVals = [];
+    var running = 0;
+    monthlyVals.forEach(function(v){ running += v; cumulativeVals.push(running); });
+
+    function dataForMode(mode){
+      return mode === 'cumulative' ? cumulativeVals : monthlyVals;
+    }
+
+    if(valueChartInstance){
+      valueChartInstance.destroy();
+      valueChartInstance = null;
+    }
+
+    var isCum = valueChartMode === 'cumulative';
+    valueChartInstance = new Chart(canvas, {
+      type: isCum ? 'line' : 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: isCum ? 'Cumulative modelled value (QAR)' : 'Modelled value by month (QAR)',
+          data: dataForMode(valueChartMode),
+          borderColor: '#6B3FA0',
+          backgroundColor: isCum ? 'rgba(107,63,160,0.1)' : '#B05CC8',
+          fill: isCum,
+          tension: 0,
+          borderWidth: 2,
+          borderRadius: isCum ? 0 : 4,
+          pointRadius: isCum ? 3 : 0,
+          pointBackgroundColor: '#6B3FA0'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function(c){ return 'QAR ' + Math.round(c.parsed.y).toLocaleString(); } } }
+        },
+        scales: {
+          x: { ticks: { autoSkip: false, maxRotation: 45 }, grid: { display: false } },
+          y: { ticks: { callback: function(v){ return (v/1000000) + 'M'; } }, grid: { color: 'rgba(0,0,0,0.06)' } }
+        }
+      }
+    });
+
+    var cumBtn = document.getElementById('at-vc-cumulative');
+    var monBtn = document.getElementById('at-vc-monthly');
+    if(cumBtn && monBtn){
+      cumBtn.classList.toggle('active-toggle', isCum);
+      monBtn.classList.toggle('active-toggle', !isCum);
+      cumBtn.style.background = isCum ? '#6B3FA0' : 'transparent';
+      cumBtn.style.color = isCum ? '#fff' : '';
+      monBtn.style.background = !isCum ? '#6B3FA0' : 'transparent';
+      monBtn.style.color = !isCum ? '#fff' : '';
+      cumBtn.onclick = function(){ valueChartMode = 'cumulative'; renderValueChart(labels, monthlyVals); };
+      monBtn.onclick = function(){ valueChartMode = 'monthly'; renderValueChart(labels, monthlyVals); };
     }
   }
 
