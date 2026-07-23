@@ -325,6 +325,49 @@
   };
   var currentView = 'board';
 
+  // ---- Investor dashboard: editable commentary ----
+  var COMMENTARY_KEY = 'adapt-pipeline-dashboard-commentary';
+  var COMMENTARY_FIELDS = [
+    { key: 'focus306090', label: 'Focus \u2014 30 / 60 / 90 days',
+      placeholder: '30 days:\n- ...\n\n60 days:\n- ...\n\n90 days:\n- ...' },
+    { key: 'resourcing', label: 'Resourcing deployed',
+      placeholder: 'Who is covering sales/BD today, time allocation, open hires, pipeline coverage ratio...' },
+    { key: 'marketFeedback', label: 'Market feedback',
+      placeholder: 'Signals from calls and meetings with buyers/suppliers so far...' },
+    { key: 'keyMessages', label: 'Key differentiators & messages',
+      placeholder: 'e.g. majority Qatari ownership, digital sovereignty, MRO security-of-supply, ECIF funding lever...' },
+    { key: 'funnelHealth', label: 'Pipeline / funnel health commentary',
+      placeholder: 'Honest framing of the current stage distribution and what is being done to move accounts through it...' },
+    { key: 'concentrationRisk', label: 'Customer concentration & lighthouse risk',
+      placeholder: 'Dependency on lighthouse accounts and mitigation if one stalls...' }
+  ];
+  var commentary = {};
+  var commentaryLoadFailed = false;
+
+  async function loadCommentary(){
+    try {
+      var res = await window.storage.get(COMMENTARY_KEY, true);
+      commentary = res && res.value ? JSON.parse(res.value) : {};
+      commentaryLoadFailed = false;
+    } catch(e){
+      // Same safety principle as account data: a failed read is not "empty".
+      // Leave commentary as-is (in-memory only) and block saving so we never
+      // overwrite real shared commentary with a blank slate.
+      commentaryLoadFailed = true;
+      console.error('ADAPT tracker: failed to read dashboard commentary from storage.', e);
+    }
+  }
+
+  async function saveCommentary(){
+    try {
+      await window.storage.set(COMMENTARY_KEY, JSON.stringify(commentary), true);
+      return true;
+    } catch(e){
+      console.error('Storage error', e);
+      return false;
+    }
+  }
+
   function buildClassOptionsHtml(current){
     var opts = '';
     var matched = false;
@@ -1011,6 +1054,7 @@
 
     await save();
     if (flagsChanged) await saveImportFlags(flags);
+    await loadCommentary();
     render();
   }
 
@@ -1190,7 +1234,41 @@
       '<div style="margin-top:8px;">Win probability and months-to-close are modelled from the sales methodology (no deals have closed yet, so these are not measured actuals). As accounts close, replace these with real figures and this dashboard will use them automatically wherever an account has a real ACV.</div>' +
       '</details>';
 
-    el.innerHTML = kpiHtml + funnelHtml + cycleHtml + assumptionsHtml;
+    var commentaryWarning = commentaryLoadFailed
+      ? '<div style="background:#FDECEA; border:1px solid #C0392B; border-radius:8px; padding:8px 12px; font-size:12px; color:#7A2418; margin-bottom:10px;">⚠️ Couldn\'t load saved commentary just now, so editing is paused to avoid overwriting it. Refresh to try again.</div>'
+      : '';
+    var commentaryHtml = '<div class="at-dash-section">' +
+      '<h3>Commentary for Monday</h3>' +
+      commentaryWarning +
+      COMMENTARY_FIELDS.map(function(f){
+        return '<div style="margin-bottom:14px;">' +
+          '<label style="display:block; font-size:12px; font-weight:bold; color:#333; margin-bottom:4px;">' + f.label + '</label>' +
+          '<textarea id="at-cm-' + f.key + '" rows="4" placeholder="' + escapeHtml(f.placeholder) + '"' +
+          (commentaryLoadFailed ? ' disabled' : '') +
+          ' style="width:100%; box-sizing:border-box; font-family:Arial,Helvetica,sans-serif; font-size:13px; padding:8px 10px; border:1px solid #D0C4E0; border-radius:8px; resize:vertical;">' +
+          escapeHtml(commentary[f.key] || '') +
+          '</textarea>' +
+        '</div>';
+      }).join('') +
+      '<div style="display:flex; align-items:center; gap:10px;">' +
+        '<button class="at-btn" id="at-cm-save"' + (commentaryLoadFailed ? ' disabled' : '') + '>Save commentary</button>' +
+        '<span id="at-cm-status" style="font-size:12px; color:#6B6B6B;"></span>' +
+      '</div>' +
+    '</div>';
+
+    el.innerHTML = kpiHtml + funnelHtml + cycleHtml + assumptionsHtml + commentaryHtml;
+
+    if(!commentaryLoadFailed){
+      document.getElementById('at-cm-save').addEventListener('click', async function(){
+        var statusEl = document.getElementById('at-cm-status');
+        statusEl.textContent = 'Saving...';
+        COMMENTARY_FIELDS.forEach(function(f){
+          commentary[f.key] = document.getElementById('at-cm-' + f.key).value;
+        });
+        var ok = await saveCommentary();
+        statusEl.textContent = ok ? 'Saved.' : 'Could not save \u2014 try again.';
+      });
+    }
   }
 
   function switchView(view){
