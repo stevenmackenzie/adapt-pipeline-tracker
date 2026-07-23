@@ -41,6 +41,38 @@
 .at-metric { background: #fff; border: 1px solid #D0C4E0; border-radius: 10px; padding: 12px 14px; }
 .at-metric .n { font-size: 22px; font-weight: bold; color: #1A237E; }
 .at-metric .l { font-size: 11px; color: #6B6B6B; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.at-viewnav { display:flex; gap:6px; background:#231447; padding:0 20px; }
+.at-viewnav .vtab { color:#CFC2E8; font-size:13px; font-weight:bold; padding:10px 14px; cursor:pointer; border-bottom:3px solid transparent; }
+.at-viewnav .vtab:hover { color:#fff; }
+.at-viewnav .vtab.active { color:#fff; border-bottom-color:#B05CC8; }
+
+.at-dash { padding: 16px 20px 40px; }
+.at-dash-kpirow { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap:10px; margin-bottom:18px; }
+.at-dash-kpi { background:#fff; border:1px solid #D0C4E0; border-radius:10px; padding:14px 16px; }
+.at-dash-kpi .n { font-size:24px; font-weight:bold; color:#1A237E; line-height:1.15; }
+.at-dash-kpi .l { font-size:11px; color:#6B6B6B; text-transform:uppercase; letter-spacing:0.03em; margin-top:4px; }
+.at-dash-kpi .sub { font-size:11px; color:#999; margin-top:2px; }
+.at-dash-kpi.accent { background:#F3EFF8; border-color:#B05CC8; }
+
+.at-dash-section { background:#fff; border:1px solid #D0C4E0; border-radius:10px; padding:16px 18px; margin-bottom:16px; }
+.at-dash-section h3 { margin:0 0 12px; font-size:14px; color:#1A237E; }
+.at-funnel-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.at-funnel-label { width:110px; font-size:12px; color:#333; flex-shrink:0; }
+.at-funnel-bar-track { flex:1; background:#F0EBF7; border-radius:6px; height:22px; position:relative; overflow:hidden; }
+.at-funnel-bar-fill { background:linear-gradient(90deg,#6B3FA0,#B05CC8); height:100%; border-radius:6px; }
+.at-funnel-count { width:70px; text-align:right; font-size:12px; font-weight:bold; color:#1A237E; flex-shrink:0; }
+
+.at-cycle-table { width:100%; border-collapse:collapse; font-size:12px; }
+.at-cycle-table th { text-align:left; color:#6B6B6B; text-transform:uppercase; font-size:10px; letter-spacing:0.03em; padding:4px 8px; border-bottom:1px solid #E5DEF0; }
+.at-cycle-table td { padding:6px 8px; border-bottom:1px solid #F2EEF8; color:#333; }
+
+.at-assumptions { font-size:12px; color:#6B6B6B; }
+.at-assumptions summary { cursor:pointer; font-weight:bold; color:#6B3FA0; margin-bottom:8px; }
+.at-assumptions table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+.at-assumptions td, .at-assumptions th { padding:4px 8px; border-bottom:1px solid #F2EEF8; text-align:left; }
+.at-modelled-tag { display:inline-block; font-size:9px; font-weight:bold; padding:2px 6px; border-radius:4px; background:#FFF3CD; color:#8A6D1B; margin-left:6px; vertical-align:middle; }
+
 .at-filters {
   display: flex; gap: 10px; padding: 12px 20px; background: #fff;
   border-bottom: 1px solid #D0C4E0; flex-wrap: wrap; align-items: center;
@@ -201,6 +233,12 @@
   <button id="at-load-retry" style="margin-left:8px; background:#C0392B; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:11px; font-weight:bold; cursor:pointer;">Retry</button>
 </div>
 
+<div class="at-viewnav">
+  <div class="vtab active" id="at-vtab-board" data-view="board">Pipeline board</div>
+  <div class="vtab" id="at-vtab-dash" data-view="dashboard">Investor dashboard</div>
+</div>
+
+<div id="at-view-board">
 <div class="at-actions-panel" id="at-actions-panel">
   <div class="at-actions-header" id="at-actions-toggle">
     <h3>📋 Action Tracker</h3>
@@ -254,6 +292,9 @@
 </div>
 
 <div class="at-board" id="at-board"></div>
+</div>
+
+<div id="at-view-dashboard" class="at-dash" style="display:none;"></div>
 
 <div id="at-modal-container"></div>
 
@@ -267,6 +308,22 @@
   var OWNER_OPTIONS = ['Diliara','Steven','Adil','Jitse'];
   var SECTOR_OPTIONS = ['Oil and gas','Healthcare','Other'];
   var CLASS_OPTIONS = ['Buyer','Supplier','Both'];
+
+  // ---- Investor dashboard: modelled assumptions ----
+  // Used only where an account has no real ACV entered yet. Edit these two
+  // blocks to update the whole dashboard's assumptions in one place.
+  var TIER_ACV_ASSUMPTION = { 1: 900000, 2: 300000, 3: 120000 }; // QAR, blended annual contract value by tier
+  var STAGE_MODEL = {
+    'Lead':            { probability: 0.10, monthsToClose: 14 },
+    'Qualify':         { probability: 0.25, monthsToClose: 10 },
+    'Discover':        { probability: 0.40, monthsToClose: 7  },
+    'Solution / POC':  { probability: 0.60, monthsToClose: 4  },
+    'Proposal':        { probability: 0.75, monthsToClose: 2  },
+    'Negotiate':       { probability: 0.90, monthsToClose: 1  },
+    'Closed Won':       { probability: 1.00, monthsToClose: 0  },
+    'Closed Lost':      { probability: 0.00, monthsToClose: 0  }
+  };
+  var currentView = 'board';
 
   function buildClassOptionsHtml(current){
     var opts = '';
@@ -1057,6 +1114,94 @@
       '<div class="at-metric"><div class="n">' + updatedRecently + '</div><div class="l">Updated in last 7 days</div></div>';
   }
 
+  function addMonths(date, months){
+    var d = new Date(date.getTime());
+    d.setMonth(d.getMonth() + months);
+    return d;
+  }
+
+  function accountValue(a){
+    if(a.acv != null && a.acv > 0) return a.acv;
+    return TIER_ACV_ASSUMPTION[a.tier] || TIER_ACV_ASSUMPTION[3];
+  }
+
+  function renderDashboard(){
+    var el = document.getElementById('at-view-dashboard');
+    var open = accounts.filter(function(a){ return a.stage !== 'Closed Won' && a.stage !== 'Closed Lost'; });
+    var today = new Date();
+
+    var totalValue = 0, weighted2026 = 0, weighted2027 = 0, weightedBeyond = 0, totalWeighted = 0;
+    var stageCounts = {};
+    STAGES.forEach(function(s){ stageCounts[s] = 0; });
+
+    open.forEach(function(a){
+      var val = accountValue(a);
+      var model = STAGE_MODEL[a.stage] || { probability: 0, monthsToClose: 0 };
+      var w = val * model.probability;
+      totalValue += val;
+      totalWeighted += w;
+      var closeYear = addMonths(today, model.monthsToClose).getFullYear();
+      if(closeYear <= 2026) weighted2026 += w;
+      else if(closeYear === 2027) weighted2027 += w;
+      else weightedBeyond += w;
+      stageCounts[a.stage] = (stageCounts[a.stage] || 0) + 1;
+    });
+
+    var blendedProbability = totalValue > 0 ? Math.round((totalWeighted / totalValue) * 100) : 0;
+    var maxStageCount = Math.max.apply(null, STAGES.filter(function(s){return s!=='Closed Won' && s!=='Closed Lost';}).map(function(s){return stageCounts[s];}).concat([1]));
+
+    var kpiHtml =
+      '<div class="at-dash-kpirow">' +
+        '<div class="at-dash-kpi accent"><div class="n">' + fmtQAR(totalValue) + '</div><div class="l">Total pipeline value (open)</div><div class="sub">modelled</div></div>' +
+        '<div class="at-dash-kpi"><div class="n">' + fmtQAR(weighted2026) + '</div><div class="l">Weighted value &mdash; 2026</div><div class="sub">modelled</div></div>' +
+        '<div class="at-dash-kpi"><div class="n">' + fmtQAR(weighted2027) + '</div><div class="l">Weighted value &mdash; 2027</div><div class="sub">modelled</div></div>' +
+        '<div class="at-dash-kpi"><div class="n">' + open.length + '</div><div class="l">Active accounts in pipeline</div></div>' +
+        '<div class="at-dash-kpi"><div class="n">' + blendedProbability + '%</div><div class="l">Blended weighted probability</div><div class="sub">modelled</div></div>' +
+        '<div class="at-dash-kpi"><div class="n">~14 mo</div><div class="l">Modelled sales cycle (lead&rarr;close)</div><div class="sub">no closed deals yet to measure actuals</div></div>' +
+      '</div>';
+
+    var funnelHtml = '<div class="at-dash-section"><h3>Where accounts sit in the sales process</h3>';
+    STAGES.filter(function(s){ return s !== 'Closed Won' && s !== 'Closed Lost'; }).forEach(function(s){
+      var count = stageCounts[s] || 0;
+      var pct = Math.round((count / maxStageCount) * 100);
+      funnelHtml += '<div class="at-funnel-row">' +
+        '<div class="at-funnel-label">' + s + '</div>' +
+        '<div class="at-funnel-bar-track"><div class="at-funnel-bar-fill" style="width:' + pct + '%;"></div></div>' +
+        '<div class="at-funnel-count">' + count + '</div>' +
+      '</div>';
+    });
+    funnelHtml += '</div>';
+
+    var cycleHtml = '<div class="at-dash-section"><h3>Modelled sales cycle &amp; win probability by stage<span class="at-modelled-tag">MODELLED</span></h3>' +
+      '<table class="at-cycle-table"><tr><th>Stage</th><th>Win probability</th><th>Est. months to close</th></tr>' +
+      STAGES.filter(function(s){ return s !== 'Closed Won' && s !== 'Closed Lost'; }).map(function(s){
+        var m = STAGE_MODEL[s];
+        return '<tr><td>' + s + '</td><td>' + Math.round(m.probability*100) + '%</td><td>' + m.monthsToClose + '</td></tr>';
+      }).join('') +
+      '</table></div>';
+
+    var assumptionsHtml = '<details class="at-dash-section at-assumptions"><summary>Assumptions used in this dashboard (for Q&amp;A)</summary>' +
+      '<div>Deal value: where an account has no ACV entered, a blended average by tier is used instead.</div>' +
+      '<table><tr><th>Tier</th><th>Assumed ACV (QAR)</th></tr>' +
+      '<tr><td>Tier 1</td><td>' + fmtQAR(TIER_ACV_ASSUMPTION[1]) + '</td></tr>' +
+      '<tr><td>Tier 2</td><td>' + fmtQAR(TIER_ACV_ASSUMPTION[2]) + '</td></tr>' +
+      '<tr><td>Tier 3</td><td>' + fmtQAR(TIER_ACV_ASSUMPTION[3]) + '</td></tr>' +
+      '</table>' +
+      '<div style="margin-top:8px;">Win probability and months-to-close are modelled from the sales methodology (no deals have closed yet, so these are not measured actuals). As accounts close, replace these with real figures and this dashboard will use them automatically wherever an account has a real ACV.</div>' +
+      '</details>';
+
+    el.innerHTML = kpiHtml + funnelHtml + cycleHtml + assumptionsHtml;
+  }
+
+  function switchView(view){
+    currentView = view;
+    document.getElementById('at-view-board').style.display = view === 'board' ? '' : 'none';
+    document.getElementById('at-view-dashboard').style.display = view === 'dashboard' ? '' : 'none';
+    document.getElementById('at-vtab-board').classList.toggle('active', view === 'board');
+    document.getElementById('at-vtab-dash').classList.toggle('active', view === 'dashboard');
+    if(view === 'dashboard') renderDashboard();
+  }
+
   function nodesHtml(a){
     var custOn = a.stage !== 'Lead';
     var deOn = true;
@@ -1285,6 +1430,7 @@
     renderMetrics();
     renderActionsPanel();
     renderBoard();
+    if(currentView === 'dashboard') renderDashboard();
   }
 
   function closeModal(){
@@ -1653,6 +1799,8 @@
 
   document.getElementById('at-add-account').addEventListener('click', openAddModal);
   document.getElementById('at-refresh').addEventListener('click', load);
+  document.getElementById('at-vtab-board').addEventListener('click', function(){ switchView('board'); });
+  document.getElementById('at-vtab-dash').addEventListener('click', function(){ switchView('dashboard'); });
 
   document.getElementById('at-export').addEventListener('click', function(){
     var blob = new Blob([JSON.stringify(accounts, null, 2)], { type: 'application/json' });
