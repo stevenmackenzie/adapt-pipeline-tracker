@@ -149,6 +149,10 @@
 .at-completed-row .cdate { font-weight: bold; color: #2E9E5B; min-width: 78px; flex-shrink: 0; }
 .at-completed-row .ccompany { font-weight: bold; color: #1A237E; min-width: 130px; flex-shrink: 0; }
 .at-completed-row .cdesc { flex: 1; color: #444; }
+.at-completed-row .tag {
+  display: inline-block; font-size: 9px; font-weight: bold; padding: 1px 6px; border-radius: 4px;
+  background: #F3EFF8; color: #6B3FA0; margin-right: 4px; text-transform: uppercase;
+}
 .at-actions-body { max-height: 280px; overflow-y: auto; }
 .at-action-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid #f0f0f0; font-size: 12px; cursor: pointer; }
 .at-action-row:hover { background: #FAF8FC; }
@@ -202,7 +206,7 @@
     <h3>📋 Action Tracker</h3>
     <div style="display:flex; align-items:center; gap:10px;">
       <span class="counts" id="at-actions-counts"></span>
-      <button class="at-review-btn" id="at-review-completed">Review completed (7d)</button>
+      <button class="at-review-btn" id="at-review-completed">Activity report (7d)</button>
       <span class="toggle" id="at-actions-toggle-icon">▾</span>
     </div>
   </div>
@@ -1086,6 +1090,13 @@
     return 'QAR ' + Math.round(n).toLocaleString('en-US');
   }
 
+  function fieldLabel(val, isCurrency, isBool){
+    if(val === null || val === undefined || val === '') return '\u2014';
+    if(isBool) return val ? 'Yes' : 'No';
+    if(isCurrency) return fmtQAR(val);
+    return String(val);
+  }
+
   function collectActions(){
     var items = [];
     accounts.forEach(function(a){
@@ -1110,43 +1121,44 @@
 
   var actionsPanelCollapsed = false;
 
-  function collectRecentlyCompleted(){
+  function collectRecentActivity(){
     var items = [];
     accounts.forEach(function(a){
       (a.activities || []).forEach(function(act){
-        if(act.done && act.completedAt){
-          var since = -daysUntil(act.completedAt);
+        if(act.loggedAt){
+          var since = -daysUntil(act.loggedAt);
           if(since >= 0 && since <= 7){
             items.push({
               accountId: a.id, accountName: a.name, title: act.title,
-              type: act.type, completedAt: act.completedAt, notes: act.notes
+              type: act.type, loggedAt: act.loggedAt, notes: act.notes
             });
           }
         }
       });
     });
-    items.sort(function(x, y){ return x.completedAt < y.completedAt ? 1 : (x.completedAt > y.completedAt ? -1 : 0); });
+    items.sort(function(x, y){ return x.loggedAt < y.loggedAt ? 1 : (x.loggedAt > y.loggedAt ? -1 : 0); });
     return items;
   }
 
   function openCompletedReviewModal(){
-    var items = collectRecentlyCompleted();
+    var items = collectRecentActivity();
     var c = document.getElementById('at-modal-container');
     var listHtml = items.length === 0
-      ? '<div class="at-hint" style="padding:10px 0;">No actions marked done in the last 7 days.</div>'
+      ? '<div class="at-hint" style="padding:10px 0;">No account updates or edits logged in the last 7 days.</div>'
       : items.map(function(item){
           return '<div class="at-completed-row">' +
-            '<span class="cdate">' + escapeHtml(fmtDate(item.completedAt)) + '</span>' +
+            '<span class="cdate">' + escapeHtml(fmtDate(item.loggedAt)) + '</span>' +
             '<span class="ccompany">' + escapeHtml(item.accountName) + '</span>' +
-            '<div class="cdesc"><strong>' + escapeHtml(item.title) + '</strong>' +
+            '<div class="cdesc"><span class="tag">' + escapeHtml(item.type) + '</span> <strong>' + escapeHtml(item.title) + '</strong>' +
             (item.notes ? '<div>' + escapeHtml(item.notes) + '</div>' : '') + '</div>' +
             '</div>';
         }).join('');
     c.innerHTML =
-      '<div class="at-modal-bg" id="at-bg-completed"><div class="at-modal" style="position:relative; max-width:600px;">' +
+      '<div class="at-modal-bg" id="at-bg-completed"><div class="at-modal" style="position:relative; max-width:640px;">' +
       '<button class="at-close" id="at-close-completed">&times;</button>' +
-      '<h3>Completed in the last 7 days (' + items.length + ')</h3>' +
-      '<div style="max-height:400px; overflow-y:auto;">' + listHtml + '</div>' +
+      '<h3>Activity report \u2014 last 7 days (' + items.length + ')</h3>' +
+      '<div class="at-hint" style="margin-bottom:10px;">Every edit, log entry, and completed action across all accounts, most recent first.</div>' +
+      '<div style="max-height:440px; overflow-y:auto;">' + listHtml + '</div>' +
       '</div></div>';
     document.getElementById('at-close-completed').onclick = closeModal;
     document.getElementById('at-bg-completed').addEventListener('click', function(e){ if(e.target.id === 'at-bg-completed') closeModal(); });
@@ -1208,12 +1220,13 @@
           if(!act) return;
           act.done = true;
           act.completedAt = todayStr();
+          act.loggedAt = todayStr();
         } else if(kind === 'nextstep'){
           acc.activities.push({
             id: uid(), type: 'Discussion', date: todayStr(),
             title: 'Completed: ' + (acc.nextStep || 'Next step'),
             notes: acc.nextStepDate ? ('Originally due ' + fmtDate(acc.nextStepDate) + '.') : '',
-            link: '', dueDate: null, done: true, completedAt: todayStr()
+            link: '', dueDate: null, done: true, completedAt: todayStr(), loggedAt: todayStr()
           });
           acc.nextStep = '';
           acc.nextStepDate = '';
@@ -1334,7 +1347,11 @@
         updatedAt: todayStr(),
         contacts: [],
         createdAt: todayStr(),
-        activities: []
+        activities: [{
+          id: uid(), type: 'Field Update', date: todayStr(),
+          title: 'Account added to tracker', notes: '',
+          link: '', dueDate: null, done: false, loggedAt: todayStr()
+        }]
       };
       accounts.unshift(acc);
       save();
@@ -1441,6 +1458,22 @@
           email: card.querySelector('.ct-email').value.trim()
         });
       });
+      var beforeNames = (a.contacts || []).map(function(c){ return c.name; }).filter(Boolean);
+      var afterNames = updated.map(function(c){ return c.name; }).filter(Boolean);
+      var added = afterNames.filter(function(n){ return beforeNames.indexOf(n) === -1; });
+      var removed = beforeNames.filter(function(n){ return afterNames.indexOf(n) === -1; });
+      var beforeCount = (a.contacts || []).length;
+      if(added.length > 0 || removed.length > 0 || beforeCount !== updated.length){
+        var parts = [];
+        if(added.length > 0) parts.push('added ' + added.join(', '));
+        if(removed.length > 0) parts.push('removed ' + removed.join(', '));
+        if(parts.length === 0) parts.push(beforeCount + ' \u2192 ' + updated.length + ' contact(s) edited');
+        a.activities.push({
+          id: uid(), type: 'Field Update', date: todayStr(),
+          title: 'Contacts updated', notes: parts.join('; '),
+          link: '', dueDate: null, done: false, loggedAt: todayStr()
+        });
+      }
       a.contacts = updated;
       a.updatedAt = todayStr();
       save();
@@ -1497,6 +1530,14 @@
     document.getElementById('dd-acv').value = a.acv != null ? a.acv : '';
 
     document.getElementById('dd-save').onclick = function(){
+      var before = {
+        tier: a.tier, stage: a.stage, owner: a.owner, msCosell: a.msCosell,
+        classification: a.classification, sector: a.sector, nextStep: a.nextStep,
+        nextStepDate: a.nextStepDate, ecifStatus: a.ecifStatus, ecifScore: a.ecifScore,
+        ecifSponsor: a.ecifSponsor, ecifFundingRequested: a.ecifFundingRequested,
+        ecifFundingApproved: a.ecifFundingApproved, acv: a.acv
+      };
+
       a.tier = parseInt(document.getElementById('dd-tier').value, 10);
       a.stage = document.getElementById('dd-stage').value;
       a.owner = document.getElementById('dd-owner').value.trim();
@@ -1513,6 +1554,32 @@
       a.ecifFundingApproved = document.getElementById('dd-ecif-approved').value.trim();
       var acvVal = document.getElementById('dd-acv').value;
       a.acv = acvVal === '' ? null : Math.max(0, parseFloat(acvVal));
+
+      var changes = [];
+      [
+        ['tier', 'Tier'], ['stage', 'Stage'], ['owner', 'Owner'], ['msCosell', 'MS co-sell'],
+        ['classification', 'Classification'], ['sector', 'Sector'], ['nextStep', 'Next step'],
+        ['nextStepDate', 'Next step date'], ['ecifStatus', 'ECIF status'], ['ecifScore', 'ECIF score'],
+        ['ecifSponsor', 'ECIF sponsor'], ['ecifFundingRequested', 'Funding requested'],
+        ['ecifFundingApproved', 'Funding approved']
+      ].forEach(function(fd){
+        var key = fd[0], label = fd[1];
+        if(before[key] !== a[key]){
+          var isBool = key === 'msCosell';
+          changes.push(label + ': ' + fieldLabel(before[key], false, isBool) + ' \u2192 ' + fieldLabel(a[key], false, isBool));
+        }
+      });
+      if(before.acv !== a.acv){
+        changes.push('Est. ACV: ' + fieldLabel(before.acv, true) + ' \u2192 ' + fieldLabel(a.acv, true));
+      }
+      if(changes.length > 0){
+        a.activities.push({
+          id: uid(), type: 'Field Update', date: todayStr(),
+          title: 'Details updated', notes: changes.join('; '),
+          link: '', dueDate: null, done: false, loggedAt: todayStr()
+        });
+      }
+
       a.updatedAt = todayStr();
       save();
       render();
@@ -1575,7 +1642,8 @@
         notes: document.getElementById('da-notes').value.trim(),
         link: document.getElementById('da-link').value.trim(),
         dueDate: dueDate || null,
-        done: false
+        done: false,
+        loggedAt: todayStr()
       });
       a.updatedAt = todayStr();
       save();
